@@ -4250,7 +4250,8 @@ function RetrospectoCopa({ participanteId, estado, palpitesMap, onFechar }) {
 
   const slides = [];
   slides.push({ tipo: "capa" });
-  slides.push({ tipo: "cravadas" });
+  // spec §8: quem nunca palpitou vê só capa + final (sem card "0 vezes")
+  if (m.apostasFeitas > 0) slides.push({ tipo: "cravadas" });
   if (m.arrancada) slides.push({ tipo: "arrancada" });
   if (m.coragem) slides.push({ tipo: "coragem" });
   if (m.melhorPior.melhor || m.melhorPior.pior) slides.push({ tipo: "melhorPior" });
