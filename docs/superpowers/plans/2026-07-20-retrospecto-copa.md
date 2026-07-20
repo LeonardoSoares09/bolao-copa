@@ -305,9 +305,14 @@ Em `src/ranking.js`, dentro de `calcularMomentos`, logo depois do bloco da arran
       if (Number(pal.h) === Number(x.palpite.h) && Number(pal.a) === Number(x.palpite.a)) sameCount += 1;
     }
     const exato = x.pts === PTS_EXATO;
+    // Menor sameCount vence; empate → quem cravou; empate ainda → maior totalG
+    // (mais gente batida = mais impressionante). Sem o 3º critério, um jogo de
+    // plateia pequena (totalG < 4) poderia ser escolhido e depois zerado pelo
+    // portão abaixo, escondendo uma coragem válida de plateia maior.
     const melhora = !coragem
       || sameCount < coragem.sameCount
-      || (sameCount === coragem.sameCount && exato && !coragem.exato);
+      || (sameCount === coragem.sameCount && exato && !coragem.exato)
+      || (sameCount === coragem.sameCount && exato === coragem.exato && totalG > coragem.totalG);
     if (melhora) coragem = { jogo: x.jogo, meuPalpite: x.palpite, sameCount, totalG, exato };
   }
   if (!(coragem && coragem.sameCount <= 2 && coragem.totalG >= 4)) coragem = null;
