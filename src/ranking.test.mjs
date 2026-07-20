@@ -317,6 +317,12 @@ check(viuBonus, "cenario deveria ter ao menos um participante com bonus (campea/
   const mDuda = calcularMomentos(4, estadoM, palM, { chaveData: chaveDataM });
   check(mDuda.melhorPior.melhor === null, "Duda sem acerto positivo → melhor null");
   check(mDuda.cravadas.exatos === 0, "Duda 0 exatos");
+
+  // arrancada: melhor DIA em pontos. Ana: 14/06 = 3+3 = 6; 15/06 = 9+1 = 10; 16/06 = 0.
+  check(mAna.arrancada && mAna.arrancada.dataKey === "2026-06-15", `arrancada deveria ser 2026-06-15, veio ${mAna.arrancada && mAna.arrancada.dataKey}`);
+  check(mAna.arrancada.pts === 10, `arrancada.pts deveria ser 10, veio ${mAna.arrancada.pts}`);
+  check(mAna.arrancada.nJogos === 2, `arrancada.nJogos deveria ser 2, veio ${mAna.arrancada.nJogos}`);
+  check(mDuda.arrancada === null, "Duda (sem pontuar) → arrancada null");
 }
 
 if (falhas === 0) console.log("✓ ranking.test.mjs — todos os cenários passaram (novo == antigo + alinhamento M4 + escala de peso)");

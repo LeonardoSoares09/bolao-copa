@@ -211,12 +211,29 @@ export function calcularMomentos(participanteId, estado, palpitesMap, opts = {})
     };
   }
 
+  // Maior arrancada: dia (local) em que somou mais pontos COM peso.
+  const chaveData = opts.chaveData || ((iso) => (iso ? iso.slice(0, 10) : "__semdata__"));
+  const porDia = {};
+  for (const x of d.porJogo) {
+    if (!x.jogo.kickoff) continue;
+    const k = chaveData(x.jogo.kickoff);
+    (porDia[k] ||= { pts: 0, n: 0 });
+    porDia[k].pts += x.ptsPeso || 0;
+    porDia[k].n += 1;
+  }
+  let arrancada = null;
+  for (const [k, v] of Object.entries(porDia)) {
+    if (v.pts > 0 && (!arrancada || v.pts > arrancada.pts)) {
+      arrancada = { dataKey: k, pts: v.pts, nJogos: v.n };
+    }
+  }
+
   return {
     persona,
     apostasFeitas: d.apostasFeitas,
     jogosContados: d.jogosEncerrados.length,
     cravadas: { exatos: d.acertosExatos, resultados: d.acertosResult },
-    arrancada: null,
+    arrancada,
     coragem: null,
     melhorPior: {
       melhor: d.melhor && d.melhor.ptsPeso > 0 ? d.melhor : null,
