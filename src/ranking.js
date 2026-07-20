@@ -228,13 +228,34 @@ export function calcularMomentos(participanteId, estado, palpitesMap, opts = {})
     }
   }
 
+  // Coragem premiada: entre os jogos que a pessoa PONTUOU, aquele em que menos
+  // gente fez o MESMO palpite exato (mais contramão). Desempate por ter cravado.
+  let coragem = null;
+  for (const x of d.porJogo) {
+    if (!x.palpite || x.pts < PTS_RESULTADO) continue;
+    const pals = palpitesMap[x.jogo.id] || {};
+    let sameCount = 0, totalG = 0;
+    for (const [pid, pal] of Object.entries(pals)) {
+      totalG += 1;
+      if (Number(pid) === participanteId) continue;
+      if (Number(pal.h) === Number(x.palpite.h) && Number(pal.a) === Number(x.palpite.a)) sameCount += 1;
+    }
+    const exato = x.pts === PTS_EXATO;
+    const melhora = !coragem
+      || sameCount < coragem.sameCount
+      || (sameCount === coragem.sameCount && exato && !coragem.exato)
+      || (sameCount === coragem.sameCount && exato === coragem.exato && totalG > coragem.totalG);
+    if (melhora) coragem = { jogo: x.jogo, meuPalpite: x.palpite, sameCount, totalG, exato };
+  }
+  if (!(coragem && coragem.sameCount <= 2 && coragem.totalG >= 4)) coragem = null;
+
   return {
     persona,
     apostasFeitas: d.apostasFeitas,
     jogosContados: d.jogosEncerrados.length,
     cravadas: { exatos: d.acertosExatos, resultados: d.acertosResult },
     arrancada,
-    coragem: null,
+    coragem,
     melhorPior: {
       melhor: d.melhor && d.melhor.ptsPeso > 0 ? d.melhor : null,
       pior: d.pior || null,

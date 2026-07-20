@@ -323,6 +323,27 @@ check(viuBonus, "cenario deveria ter ao menos um participante com bonus (campea/
   check(mAna.arrancada.pts === 10, `arrancada.pts deveria ser 10, veio ${mAna.arrancada.pts}`);
   check(mAna.arrancada.nJogos === 2, `arrancada.nJogos deveria ser 2, veio ${mAna.arrancada.nJogos}`);
   check(mDuda.arrancada === null, "Duda (sem pontuar) → arrancada null");
+
+  // coragem: entre os jogos que Ana pontuou, o mais "contra a maioria".
+  // jogo 12 (3×0): Ana crava 3×0, ninguém mais → sameCount 0, totalG 4, exato.
+  check(mAna.coragem && mAna.coragem.jogo.id === 12, `coragem deveria ser jogo 12, veio ${mAna.coragem && mAna.coragem.jogo.id}`);
+  check(mAna.coragem.sameCount === 0, `coragem.sameCount deveria ser 0, veio ${mAna.coragem.sameCount}`);
+  check(mAna.coragem.totalG === 4, `coragem.totalG deveria ser 4, veio ${mAna.coragem.totalG}`);
+  check(mAna.coragem.exato === true, "coragem do jogo 12 foi cravada");
+}
+
+/* ---- coragem: null quando não há plateia suficiente (totalG < 4) ---- */
+{
+  const chaveDataM = (iso) => (iso ? iso.slice(0, 10) : "__semdata__");
+  const est2 = {
+    participantes: [{ id: 1, nome: "A" }, { id: 2, nome: "B" }, { id: 3, nome: "C" }],
+    jogos: [{ id: 1, casa: "X", fora: "Y", kickoff: "2026-06-14T18:00:00Z", gh: 2, ga: 1, live: false, peso: 1 }],
+    resultadoEspecial: { campeao: { confirmado: false }, artilheiro: { confirmado: false } },
+    palpitesCampeao: [], premiadosArtilheiro: [], antecedenciaMedia: [],
+  };
+  const pal2 = { 1: { 1: { h: 2, a: 1 }, 2: { h: 1, a: 0 }, 3: { h: 0, a: 1 } } };
+  const m2 = calcularMomentos(1, est2, pal2, { chaveData: chaveDataM });
+  check(m2.coragem === null, "coragem null quando só 3 palpitaram (totalG < 4)");
 }
 
 if (falhas === 0) console.log("✓ ranking.test.mjs — todos os cenários passaram (novo == antigo + alinhamento M4 + escala de peso)");
