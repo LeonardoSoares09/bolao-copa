@@ -176,3 +176,53 @@ export function criterioDesempate(a, b) {
   if (a.resultados !== b.resultados) return { icon: "✅", label: "mais resultados" };
   return { icon: "⏱", label: "palpita com mais antecedência" };
 }
+
+/* Momentos do "Retrospecto da Copa" (Wrapped pessoal) de UM participante.
+   Função pura: recebe o estado e o mapa de palpites, devolve os dados de cada
+   slide. arrancada/coragem são preenchidos nas etapas 2 e 3.
+   opts.chaveData(iso) → chave de dia local (para agrupar a arrancada). */
+export function calcularMomentos(participanteId, estado, palpitesMap, opts = {}) {
+  const d = calcularDetalhamento(participanteId, estado, palpitesMap);
+
+  // Persona pela antecedência média (segundos antes do kickoff).
+  const seg = (estado.antecedenciaMedia || [])
+    .find((r) => r.participante_id === participanteId)?.segundos;
+  let persona = { chave: null, label: null };
+  if (seg != null && !Number.isNaN(seg)) {
+    if (seg >= 43200) persona = { chave: "precavido", label: "O Precavido" };
+    else if (seg <= 7200) persona = { chave: "afobado", label: "O Afobado" };
+    else persona = { chave: "equilibrado", label: "O Equilibrado" };
+  }
+
+  // Colocação final: MESMO ranking do app (calcularStats + compararRanking).
+  const antecedenciaMap = {};
+  for (const r of estado.antecedenciaMedia || []) antecedenciaMap[r.participante_id] = r.segundos;
+  const ranking = estado.participantes
+    .map((p) => calcularStats(p, estado, palpitesMap, { jogos: estado.jogos }))
+    .sort((a, b) => compararRanking(a, b, antecedenciaMap));
+  const me = ranking.find((p) => p.id === participanteId) || null;
+  let final = null;
+  if (me) {
+    const pos = 1 + ranking.filter((p) => compararRanking(p, me, antecedenciaMap) < 0).length;
+    const empatado = ranking.filter((p) => compararRanking(p, me, antecedenciaMap) === 0).length > 1;
+    final = {
+      pos, total: ranking.length, empatado, pontos: me.pontos,
+      acertouCampeao: me.acertouCampeao, acertouArtilheiro: me.acertouArtilheiro,
+    };
+  }
+
+  return {
+    persona,
+    apostasFeitas: d.apostasFeitas,
+    jogosContados: d.jogosEncerrados.length,
+    cravadas: { exatos: d.acertosExatos, resultados: d.acertosResult },
+    arrancada: null,
+    coragem: null,
+    melhorPior: {
+      melhor: d.melhor && d.melhor.ptsPeso > 0 ? d.melhor : null,
+      pior: d.pior || null,
+    },
+    evolucao: calcularEvolucao(participanteId, estado, palpitesMap),
+    final,
+  };
+}
