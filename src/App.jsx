@@ -191,6 +191,7 @@ export default function App() {
   const [abrirLembrete, setAbrirLembrete] = useState(false);
   const [participanteModal, setParticipanteModal] = useState(null);
   const [campeaoModalAberto, setCampeaoModalAberto] = useState(false);
+  const [abrirRetrospecto, setAbrirRetrospecto] = useState(false);
   const [proximoFechado, setProximoFechado] = useState(false);
   const [jogoPreSel, setJogoPreSel] = useState(null);
   const [statsPreSel, setStatsPreSel] = useState(null);
@@ -431,7 +432,9 @@ export default function App() {
             </button>
           )}
         </div>
-        <div className="topo-eyebrow">COPA DO MUNDO · 2026</div>
+        <div className="topo-eyebrow">
+          COPA DO MUNDO · 2026{bolaoEncerrado && <span className="topo-encerrada"> · ENCERRADA</span>}
+        </div>
         <h1 className="topo-titulo">BOLÃO DOS GURIS</h1>
         <div className="topo-divider" aria-hidden="true" />
         <div className="topo-stats">
@@ -440,6 +443,10 @@ export default function App() {
           <span>{encerrados} encerrado{encerrados === 1 ? "" : "s"}</span>
         </div>
       </header>
+
+      {bolaoEncerrado && euParticipante && (
+        <BannerRetrospecto onAbrir={() => setAbrirRetrospecto(true)} />
+      )}
 
       {abrirRegras && <ModalRegras onFechar={() => setAbrirRegras(false)} />}
       {abrirPagamento && <ModalPagamento onFechar={() => setAbrirPagamento(false)} />}
@@ -497,6 +504,15 @@ export default function App() {
           palpitesMap={palpitesMap}
           euId={estado.eu.id}
           onFechar={() => setCampeaoModalAberto(false)}
+        />
+      )}
+
+      {abrirRetrospecto && euParticipante && (
+        <RetrospectoCopa
+          participanteId={estado.eu.id}
+          estado={estado}
+          palpitesMap={palpitesMap}
+          onFechar={() => setAbrirRetrospecto(false)}
         />
       )}
 
@@ -4463,6 +4479,7 @@ function Estilo() {
         font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
         color: rgba(255,255,255,.38); margin-bottom: 4px;
       }
+      .topo-encerrada { color: var(--ambar, #ffc53d); font-weight: 700; }
       .topo-titulo {
         margin: 0; font-weight: 800;
         font-size: clamp(36px, 10vw, 72px);
