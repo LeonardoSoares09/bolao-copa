@@ -346,5 +346,32 @@ check(viuBonus, "cenario deveria ter ao menos um participante com bonus (campea/
   check(m2.coragem === null, "coragem null quando só 3 palpitaram (totalG < 4)");
 }
 
+/* ---- coragem: desempate por totalG quando sameCount e exato empatam ---- */
+{
+  const cd = (iso) => (iso ? iso.slice(0, 10) : "__semdata__");
+  const est3 = {
+    participantes: [
+      { id: 1, nome: "A" }, { id: 2, nome: "B" }, { id: 3, nome: "C" },
+      { id: 4, nome: "D" }, { id: 5, nome: "E" },
+    ],
+    jogos: [
+      { id: 20, casa: "P", fora: "Q", kickoff: "2026-06-20T18:00:00Z", gh: 1, ga: 0, live: false, peso: 1 },
+      { id: 21, casa: "R", fora: "S", kickoff: "2026-06-21T18:00:00Z", gh: 2, ga: 0, live: false, peso: 1 },
+    ],
+    resultadoEspecial: { campeao: { confirmado: false }, artilheiro: { confirmado: false } },
+    palpitesCampeao: [], premiadosArtilheiro: [], antecedenciaMedia: [],
+  };
+  const pal3 = {
+    20: { 1: { h: 1, a: 0 }, 2: { h: 0, a: 1 }, 3: { h: 2, a: 2 }, 4: { h: 0, a: 0 } },              // totalG 4, ninguém mais 1×0 → sameCount 0
+    21: { 1: { h: 2, a: 0 }, 2: { h: 1, a: 1 }, 3: { h: 0, a: 2 }, 4: { h: 3, a: 3 }, 5: { h: 1, a: 0 } }, // totalG 5, ninguém mais 2×0 → sameCount 0
+  };
+  const m3 = calcularMomentos(1, est3, pal3, { chaveData: cd });
+  // Jogo 20 é processado antes do 21; ambos empatam em sameCount(0) e exato(true).
+  // Sem o desempate por totalG, o jogo 20 ficaria selecionado. Com ele, ganha o 21.
+  check(m3.coragem && m3.coragem.jogo.id === 21, `desempate por totalG deveria escolher jogo 21, veio ${m3.coragem && m3.coragem.jogo.id}`);
+  check(m3.coragem.totalG === 5, `coragem.totalG deveria ser 5, veio ${m3.coragem && m3.coragem.totalG}`);
+  check(m3.coragem.sameCount === 0, "coragem.sameCount deveria ser 0 no desempate por totalG");
+}
+
 if (falhas === 0) console.log("✓ ranking.test.mjs — todos os cenários passaram (novo == antigo + alinhamento M4 + escala de peso)");
 else { console.error(`\n✗ ${falhas} verificação(ões) falharam`); process.exit(1); }
