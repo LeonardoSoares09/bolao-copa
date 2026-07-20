@@ -3,7 +3,7 @@
    principal. Roda com: node src/ranking.test.mjs
    Não é parte do bundle — é uma rede de segurança do refactor. */
 
-import { pontosDoPalpite, pontosComPeso, rotuloDoPeso, calcularStats, compararRanking, criterioDesempate, temPlacar, calcularDetalhamento, calcularEvolucao } from "./ranking.js";
+import { pontosDoPalpite, pontosComPeso, rotuloDoPeso, calcularStats, compararRanking, criterioDesempate, temPlacar, calcularDetalhamento, calcularEvolucao, calcularMomentos } from "./ranking.js";
 
 let falhas = 0;
 const check = (cond, msg) => { if (!cond) { falhas++; console.error("  ✗ " + msg); } };
@@ -267,6 +267,110 @@ check(viuBonus, "cenario deveria ter ao menos um participante com bonus (campea/
   const campeoes = novo.filter((p) => compararRanking(p, novo[0], antecedenciaMap) === 0);
   check(campeoes.length === 1, `cenário sem empate real no topo deveria dar 1 campeão só, veio ${campeoes.length}`);
   check(campeoes[0].id === novo[0].id, "campeão deveria ser o próprio líder do ranking (auto-comparação = 0)");
+}
+
+/* ---- calcularMomentos: retrospecto pessoal ---- */
+{
+  const chaveDataM = (iso) => (iso ? iso.slice(0, 10) : "__semdata__");
+  const estadoM = {
+    participantes: [
+      { id: 1, nome: "Ana" }, { id: 2, nome: "Bruno" },
+      { id: 3, nome: "Caio" }, { id: 4, nome: "Duda" },
+    ],
+    jogos: [
+      { id: 10, casa: "BRA", fora: "ARG", kickoff: "2026-06-14T18:00:00Z", gh: 2, ga: 1, live: false, peso: 1 },
+      { id: 11, casa: "FRA", fora: "ESP", kickoff: "2026-06-14T21:00:00Z", gh: 0, ga: 0, live: false, peso: 1 },
+      { id: 12, casa: "ITA", fora: "POR", kickoff: "2026-06-15T18:00:00Z", gh: 3, ga: 0, live: false, peso: 3 },
+      { id: 13, casa: "ALE", fora: "URU", kickoff: "2026-06-16T18:00:00Z", gh: 1, ga: 1, live: false, peso: 1 },
+      { id: 14, casa: "ENG", fora: "NED", kickoff: "2026-06-15T21:00:00Z", gh: 2, ga: 1, live: false, peso: 1 },
+    ],
+    resultadoEspecial: { campeao: { confirmado: true, valor: "BRA" }, artilheiro: { confirmado: true } },
+    palpitesCampeao: [ { participante_id: 1, selecao: "BRA" } ],
+    premiadosArtilheiro: [],
+    antecedenciaMedia: [
+      { participante_id: 1, segundos: 50000 }, // Ana: precavido (>=43200)
+      { participante_id: 2, segundos: 3000 },  // Bruno: afobado (<=7200)
+      { participante_id: 3, segundos: 20000 }, // Caio: equilibrado
+      // Duda: sem dado
+    ],
+  };
+  const palM = {
+    10: { 1: { h: 2, a: 1 }, 2: { h: 1, a: 0 }, 3: { h: 0, a: 2 } },
+    11: { 1: { h: 0, a: 0 }, 2: { h: 1, a: 1 } },
+    12: { 1: { h: 3, a: 0 }, 2: { h: 2, a: 0 }, 3: { h: 1, a: 0 }, 4: { h: 0, a: 1 } },
+    13: { 1: { h: 2, a: 0 }, 2: { h: 1, a: 1 } },
+    14: { 1: { h: 2, a: 0 }, 2: { h: 1, a: 1 }, 3: { h: 3, a: 3 }, 4: { h: 0, a: 2 } },
+  };
+  const mAna = calcularMomentos(1, estadoM, palM, { chaveData: chaveDataM });
+  check(mAna.persona.chave === "precavido", `Ana persona deveria ser precavido, veio ${mAna.persona.chave}`);
+  check(calcularMomentos(2, estadoM, palM, { chaveData: chaveDataM }).persona.chave === "afobado", "Bruno = afobado");
+  check(calcularMomentos(3, estadoM, palM, { chaveData: chaveDataM }).persona.chave === "equilibrado", "Caio = equilibrado");
+  check(calcularMomentos(4, estadoM, palM, { chaveData: chaveDataM }).persona.chave === null, "Duda sem antecedência = null");
+  check(mAna.cravadas.exatos === 3, `Ana exatos deveria ser 3, veio ${mAna.cravadas.exatos}`);
+  check(mAna.cravadas.resultados === 1, `Ana resultados deveria ser 1, veio ${mAna.cravadas.resultados}`);
+  check(mAna.melhorPior.melhor && mAna.melhorPior.melhor.jogo.id === 12, "melhor = jogo 12 (peso 3, exato = 9)");
+  check(mAna.melhorPior.pior && mAna.melhorPior.pior.jogo.id === 13, "pior = jogo 13 (erro)");
+  check(mAna.evolucao.length === 5, `evolução deveria ter 5 jogos, veio ${mAna.evolucao.length}`);
+  check(mAna.final && mAna.final.pos === 1, "Ana termina em 1º");
+  check(mAna.final.total === 4, "total de 4 participantes");
+  check(mAna.final.acertouCampeao === true, "Ana acertou a campeã (bônus)");
+  const mDuda = calcularMomentos(4, estadoM, palM, { chaveData: chaveDataM });
+  check(mDuda.melhorPior.melhor === null, "Duda sem acerto positivo → melhor null");
+  check(mDuda.cravadas.exatos === 0, "Duda 0 exatos");
+
+  // arrancada: melhor DIA em pontos. Ana: 14/06 = 3+3 = 6; 15/06 = 9+1 = 10; 16/06 = 0.
+  check(mAna.arrancada && mAna.arrancada.dataKey === "2026-06-15", `arrancada deveria ser 2026-06-15, veio ${mAna.arrancada && mAna.arrancada.dataKey}`);
+  check(mAna.arrancada.pts === 10, `arrancada.pts deveria ser 10, veio ${mAna.arrancada.pts}`);
+  check(mAna.arrancada.nJogos === 2, `arrancada.nJogos deveria ser 2, veio ${mAna.arrancada.nJogos}`);
+  check(mDuda.arrancada === null, "Duda (sem pontuar) → arrancada null");
+
+  // coragem: entre os jogos que Ana pontuou, o mais "contra a maioria".
+  // jogo 12 (3×0): Ana crava 3×0, ninguém mais → sameCount 0, totalG 4, exato.
+  check(mAna.coragem && mAna.coragem.jogo.id === 12, `coragem deveria ser jogo 12, veio ${mAna.coragem && mAna.coragem.jogo.id}`);
+  check(mAna.coragem.sameCount === 0, `coragem.sameCount deveria ser 0, veio ${mAna.coragem.sameCount}`);
+  check(mAna.coragem.totalG === 4, `coragem.totalG deveria ser 4, veio ${mAna.coragem.totalG}`);
+  check(mAna.coragem.exato === true, "coragem do jogo 12 foi cravada");
+}
+
+/* ---- coragem: null quando não há plateia suficiente (totalG < 4) ---- */
+{
+  const chaveDataM = (iso) => (iso ? iso.slice(0, 10) : "__semdata__");
+  const est2 = {
+    participantes: [{ id: 1, nome: "A" }, { id: 2, nome: "B" }, { id: 3, nome: "C" }],
+    jogos: [{ id: 1, casa: "X", fora: "Y", kickoff: "2026-06-14T18:00:00Z", gh: 2, ga: 1, live: false, peso: 1 }],
+    resultadoEspecial: { campeao: { confirmado: false }, artilheiro: { confirmado: false } },
+    palpitesCampeao: [], premiadosArtilheiro: [], antecedenciaMedia: [],
+  };
+  const pal2 = { 1: { 1: { h: 2, a: 1 }, 2: { h: 1, a: 0 }, 3: { h: 0, a: 1 } } };
+  const m2 = calcularMomentos(1, est2, pal2, { chaveData: chaveDataM });
+  check(m2.coragem === null, "coragem null quando só 3 palpitaram (totalG < 4)");
+}
+
+/* ---- coragem: desempate por totalG quando sameCount e exato empatam ---- */
+{
+  const cd = (iso) => (iso ? iso.slice(0, 10) : "__semdata__");
+  const est3 = {
+    participantes: [
+      { id: 1, nome: "A" }, { id: 2, nome: "B" }, { id: 3, nome: "C" },
+      { id: 4, nome: "D" }, { id: 5, nome: "E" },
+    ],
+    jogos: [
+      { id: 20, casa: "P", fora: "Q", kickoff: "2026-06-20T18:00:00Z", gh: 1, ga: 0, live: false, peso: 1 },
+      { id: 21, casa: "R", fora: "S", kickoff: "2026-06-21T18:00:00Z", gh: 2, ga: 0, live: false, peso: 1 },
+    ],
+    resultadoEspecial: { campeao: { confirmado: false }, artilheiro: { confirmado: false } },
+    palpitesCampeao: [], premiadosArtilheiro: [], antecedenciaMedia: [],
+  };
+  const pal3 = {
+    20: { 1: { h: 1, a: 0 }, 2: { h: 0, a: 1 }, 3: { h: 2, a: 2 }, 4: { h: 0, a: 0 } },              // totalG 4, ninguém mais 1×0 → sameCount 0
+    21: { 1: { h: 2, a: 0 }, 2: { h: 1, a: 1 }, 3: { h: 0, a: 2 }, 4: { h: 3, a: 3 }, 5: { h: 1, a: 0 } }, // totalG 5, ninguém mais 2×0 → sameCount 0
+  };
+  const m3 = calcularMomentos(1, est3, pal3, { chaveData: cd });
+  // Jogo 20 é processado antes do 21; ambos empatam em sameCount(0) e exato(true).
+  // Sem o desempate por totalG, o jogo 20 ficaria selecionado. Com ele, ganha o 21.
+  check(m3.coragem && m3.coragem.jogo.id === 21, `desempate por totalG deveria escolher jogo 21, veio ${m3.coragem && m3.coragem.jogo.id}`);
+  check(m3.coragem.totalG === 5, `coragem.totalG deveria ser 5, veio ${m3.coragem && m3.coragem.totalG}`);
+  check(m3.coragem.sameCount === 0, "coragem.sameCount deveria ser 0 no desempate por totalG");
 }
 
 if (falhas === 0) console.log("✓ ranking.test.mjs — todos os cenários passaram (novo == antigo + alinhamento M4 + escala de peso)");

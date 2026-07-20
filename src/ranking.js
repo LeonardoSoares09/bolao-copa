@@ -176,3 +176,91 @@ export function criterioDesempate(a, b) {
   if (a.resultados !== b.resultados) return { icon: "✅", label: "mais resultados" };
   return { icon: "⏱", label: "palpita com mais antecedência" };
 }
+
+/* Momentos do "Retrospecto da Copa" (Wrapped pessoal) de UM participante.
+   Função pura: recebe o estado e o mapa de palpites, devolve os dados de cada
+   slide. arrancada/coragem são preenchidos nas etapas 2 e 3.
+   opts.chaveData(iso) → chave de dia local (para agrupar a arrancada). */
+export function calcularMomentos(participanteId, estado, palpitesMap, opts = {}) {
+  const d = calcularDetalhamento(participanteId, estado, palpitesMap);
+
+  // Persona pela antecedência média (segundos antes do kickoff).
+  const seg = (estado.antecedenciaMedia || [])
+    .find((r) => r.participante_id === participanteId)?.segundos;
+  let persona = { chave: null, label: null };
+  if (seg != null && !Number.isNaN(seg)) {
+    if (seg >= 43200) persona = { chave: "precavido", label: "O Precavido" };
+    else if (seg <= 7200) persona = { chave: "afobado", label: "O Afobado" };
+    else persona = { chave: "equilibrado", label: "O Equilibrado" };
+  }
+
+  // Colocação final: MESMO ranking do app (calcularStats + compararRanking).
+  const antecedenciaMap = {};
+  for (const r of estado.antecedenciaMedia || []) antecedenciaMap[r.participante_id] = r.segundos;
+  const ranking = estado.participantes
+    .map((p) => calcularStats(p, estado, palpitesMap, { jogos: estado.jogos }))
+    .sort((a, b) => compararRanking(a, b, antecedenciaMap));
+  const me = ranking.find((p) => p.id === participanteId) || null;
+  let final = null;
+  if (me) {
+    const pos = 1 + ranking.filter((p) => compararRanking(p, me, antecedenciaMap) < 0).length;
+    const empatado = ranking.filter((p) => compararRanking(p, me, antecedenciaMap) === 0).length > 1;
+    final = {
+      pos, total: ranking.length, empatado, pontos: me.pontos,
+      acertouCampeao: me.acertouCampeao, acertouArtilheiro: me.acertouArtilheiro,
+    };
+  }
+
+  // Maior arrancada: dia (local) em que somou mais pontos COM peso.
+  const chaveData = opts.chaveData || ((iso) => (iso ? iso.slice(0, 10) : "__semdata__"));
+  const porDia = {};
+  for (const x of d.porJogo) {
+    if (!x.jogo.kickoff) continue;
+    const k = chaveData(x.jogo.kickoff);
+    (porDia[k] ||= { pts: 0, n: 0 });
+    porDia[k].pts += x.ptsPeso || 0;
+    porDia[k].n += 1;
+  }
+  let arrancada = null;
+  for (const [k, v] of Object.entries(porDia)) {
+    if (v.pts > 0 && (!arrancada || v.pts > arrancada.pts)) {
+      arrancada = { dataKey: k, pts: v.pts, nJogos: v.n };
+    }
+  }
+
+  // Coragem premiada: entre os jogos que a pessoa PONTUOU, aquele em que menos
+  // gente fez o MESMO palpite exato (mais contramão). Desempate por ter cravado.
+  let coragem = null;
+  for (const x of d.porJogo) {
+    if (!x.palpite || x.pts < PTS_RESULTADO) continue;
+    const pals = palpitesMap[x.jogo.id] || {};
+    let sameCount = 0, totalG = 0;
+    for (const [pid, pal] of Object.entries(pals)) {
+      totalG += 1;
+      if (Number(pid) === participanteId) continue;
+      if (Number(pal.h) === Number(x.palpite.h) && Number(pal.a) === Number(x.palpite.a)) sameCount += 1;
+    }
+    const exato = x.pts === PTS_EXATO;
+    const melhora = !coragem
+      || sameCount < coragem.sameCount
+      || (sameCount === coragem.sameCount && exato && !coragem.exato)
+      || (sameCount === coragem.sameCount && exato === coragem.exato && totalG > coragem.totalG);
+    if (melhora) coragem = { jogo: x.jogo, meuPalpite: x.palpite, sameCount, totalG, exato };
+  }
+  if (!(coragem && coragem.sameCount <= 2 && coragem.totalG >= 4)) coragem = null;
+
+  return {
+    persona,
+    apostasFeitas: d.apostasFeitas,
+    jogosContados: d.jogosEncerrados.length,
+    cravadas: { exatos: d.acertosExatos, resultados: d.acertosResult },
+    arrancada,
+    coragem,
+    melhorPior: {
+      melhor: d.melhor && d.melhor.ptsPeso > 0 ? d.melhor : null,
+      pior: d.pior || null,
+    },
+    evolucao: calcularEvolucao(participanteId, estado, palpitesMap),
+    final,
+  };
+}
