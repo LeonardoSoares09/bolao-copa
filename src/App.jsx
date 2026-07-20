@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   PTS_EXATO, PTS_RESULTADO, temPlacar, BONUS_CAMPEAO, BONUS_ARTILHEIRO,
   pontosDoPalpite, pontosComPeso, pesoDoJogo, rotuloDaFase, rotuloDoPeso, calcularStats, compararRanking, criterioDesempate,
-  calcularDetalhamento, calcularEvolucao,
+  calcularDetalhamento, calcularEvolucao, calcularMomentos,
 } from "./ranking";
 
 /* ============================================================
@@ -4204,6 +4204,190 @@ function Vazio({ texto }) {
   );
 }
 
+/* Banner de entrada do retrospecto (mesmo padrão do BannerCampeaoBolao). */
+function BannerRetrospecto({ onAbrir }) {
+  return (
+    <button className="banner-retrospecto entra-2" onClick={onAbrir}>
+      <span className="banner-retrospecto-emoji" aria-hidden="true">🎬</span>
+      <span className="banner-retrospecto-txt">Ver meu retrospecto da Copa</span>
+      <span className="banner-retrospecto-cta">Bora →</span>
+    </button>
+  );
+}
+
+/* Retrospecto pessoal estilo "Wrapped": slides em tela cheia com os momentos
+   da Copa do participante. Slides condicionais pulam quando não há substância.
+   Dados de calcularMomentos (ranking.js). */
+const MESES_RETRO = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+function RetrospectoCopa({ participanteId, estado, palpitesMap, onFechar }) {
+  const participante = estado.participantes.find((p) => p.id === participanteId);
+  const m = useMemo(
+    () => calcularMomentos(participanteId, estado, palpitesMap, { chaveData }),
+    [participanteId, estado, palpitesMap]
+  );
+  const reduzMovimento = typeof window !== "undefined" && window.matchMedia
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fmtDia = (key) => {
+    const [, mes, dia] = (key || "").split("-");
+    return mes && dia ? `${Number(dia)} de ${MESES_RETRO[Number(mes) - 1]}` : "";
+  };
+
+  const slides = [];
+  slides.push({ tipo: "capa" });
+  slides.push({ tipo: "cravadas" });
+  if (m.arrancada) slides.push({ tipo: "arrancada" });
+  if (m.coragem) slides.push({ tipo: "coragem" });
+  if (m.melhorPior.melhor || m.melhorPior.pior) slides.push({ tipo: "melhorPior" });
+  if (m.evolucao && m.evolucao.length >= 2) slides.push({ tipo: "escalada" });
+  slides.push({ tipo: "final" });
+
+  const total = slides.length;
+  const [idx, setIdx] = useState(0);
+  const avancar = () => setIdx((i) => Math.min(i + 1, total - 1));
+  const voltar = () => setIdx((i) => Math.max(i - 1, 0));
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onFechar();
+      else if (e.key === "ArrowRight") avancar();
+      else if (e.key === "ArrowLeft") voltar();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [total]);
+
+  const toqueX = useRef(null);
+  const onTouchStart = (e) => { toqueX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (toqueX.current == null) return;
+    const dx = e.changedTouches[0].clientX - toqueX.current;
+    if (dx < -40) avancar(); else if (dx > 40) voltar();
+    toqueX.current = null;
+  };
+  const onClickArea = (e) => {
+    const x = e.clientX - e.currentTarget.getBoundingClientRect().left;
+    if (x < e.currentTarget.clientWidth * 0.35) voltar(); else avancar();
+  };
+
+  const slide = slides[idx];
+  const ehUltimo = idx === total - 1;
+  const jogoTxt = (j) => `${j.casa} ${j.gh}×${j.ga} ${j.fora}`;
+
+  return (
+    <div className="retro-overlay" role="dialog" aria-modal="true">
+      <div className="retro-progresso">
+        {slides.map((s, i) => (
+          <span key={i} className={"retro-progresso-seg" + (i <= idx ? " on" : "")} />
+        ))}
+      </div>
+      <button className="retro-fechar" onClick={onFechar} aria-label="Fechar">✕</button>
+
+      <div
+        className={"retro-palco" + (reduzMovimento ? "" : " retro-anima")}
+        key={idx}
+        onClick={onClickArea}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {slide.tipo === "capa" && (
+          <div className="retro-card retro-capa">
+            <span className="retro-anel">
+              <Avatar nome={participante?.nome} emoji={participante?.avatarEmoji} cor={participante?.avatarCor} size={84} />
+            </span>
+            <div className="retro-eyebrow">A SUA COPA 2026</div>
+            <div className="retro-nome">{participante?.nome}</div>
+            {m.persona.label && <div className="retro-selo">{m.persona.label}</div>}
+            <div className="retro-sub">{m.apostasFeitas} palpites em {m.jogosContados} jogos. Bora relembrar?</div>
+          </div>
+        )}
+
+        {slide.tipo === "cravadas" && (
+          <div className="retro-card">
+            <span className="retro-emoji" aria-hidden="true">🎯</span>
+            {m.cravadas.exatos > 0 ? (
+              <>
+                <div className="retro-numerao">{m.cravadas.exatos}</div>
+                <div className="retro-frase">{m.cravadas.exatos === 1 ? "placar cravado na mosca" : "placares cravados na mosca"}</div>
+              </>
+            ) : (
+              <>
+                <div className="retro-frase">Nenhuma cravada dessa vez…</div>
+                <div className="retro-sub">mas você acertou o resultado {m.cravadas.resultados} {m.cravadas.resultados === 1 ? "vez" : "vezes"}.</div>
+              </>
+            )}
+          </div>
+        )}
+
+        {slide.tipo === "arrancada" && (
+          <div className="retro-card">
+            <span className="retro-emoji" aria-hidden="true">🚀</span>
+            <div className="retro-eyebrow">SUA MAIOR ARRANCADA</div>
+            <div className="retro-numerao">+{m.arrancada.pts}</div>
+            <div className="retro-frase">pts na noite de {fmtDia(m.arrancada.dataKey)}</div>
+            <div className="retro-sub">{m.arrancada.nJogos} {m.arrancada.nJogos === 1 ? "jogo" : "jogos"} numa tacada só.</div>
+          </div>
+        )}
+
+        {slide.tipo === "coragem" && (
+          <div className="retro-card">
+            <span className="retro-emoji" aria-hidden="true">💎</span>
+            <div className="retro-eyebrow">CORAGEM PREMIADA</div>
+            <div className="retro-frase">{jogoTxt(m.coragem.jogo)}</div>
+            <div className="retro-sub">
+              Você {m.coragem.exato ? "cravou" : "acertou"} e foi {m.coragem.sameCount === 0 ? "o ÚNICO" : `1 de só ${m.coragem.sameCount + 1}`} a apostar nisso.
+            </div>
+          </div>
+        )}
+
+        {slide.tipo === "melhorPior" && (
+          <div className="retro-card retro-melhorpior">
+            <div className="retro-eyebrow">O MELHOR E O PIOR</div>
+            {m.melhorPior.melhor && (
+              <div className="retro-mp-linha bom">
+                <span className="retro-mp-ico">💪</span>
+                <span className="retro-mp-jogo">{jogoTxt(m.melhorPior.melhor.jogo)}</span>
+                <span className="retro-mp-pts">+{m.melhorPior.melhor.ptsPeso}</span>
+              </div>
+            )}
+            {m.melhorPior.pior && (
+              <div className="retro-mp-linha ruim">
+                <span className="retro-mp-ico">😬</span>
+                <span className="retro-mp-jogo">{jogoTxt(m.melhorPior.pior.jogo)}</span>
+                <span className="retro-mp-pts">+{m.melhorPior.pior.ptsPeso}</span>
+              </div>
+            )}
+            <div className="retro-sub">a gente finge que não viu o de baixo 🙈</div>
+          </div>
+        )}
+
+        {slide.tipo === "escalada" && (
+          <div className="retro-card">
+            <span className="retro-emoji" aria-hidden="true">📈</span>
+            <div className="retro-eyebrow">SUA ESCALADA</div>
+            <GraficoTrajetoria evolucao={m.evolucao} />
+            <div className="retro-sub">como você subiu ao longo da Copa.</div>
+          </div>
+        )}
+
+        {slide.tipo === "final" && (
+          <div className="retro-card retro-final">
+            {!reduzMovimento && <ConfeteCampeao />}
+            <div className="retro-eyebrow">ONDE VOCÊ TERMINOU</div>
+            <div className="retro-posicao">{m.final.empatado ? "empatado em " : ""}{m.final.pos}º</div>
+            <div className="retro-frase">de {m.final.total} · {m.final.pontos} pts</div>
+            {m.final.acertouCampeao && <div className="retro-bonus">🏆 Acertou a campeã (+{BONUS_CAMPEAO})</div>}
+            {m.final.acertouArtilheiro && <div className="retro-bonus">⚽ Acertou o artilheiro (+{BONUS_ARTILHEIRO})</div>}
+            <div className="retro-sub">📸 tira um print e manda no grupo!</div>
+          </div>
+        )}
+      </div>
+
+      {!ehUltimo && <div className="retro-dica" aria-hidden="true">toque para continuar →</div>}
+      {ehUltimo && <button className="retro-final-btn" onClick={onFechar}>Fechar</button>}
+    </div>
+  );
+}
+
 /* ================= ESTILO ================= */
 function Estilo() {
   return (
@@ -5143,6 +5327,93 @@ function Estilo() {
         .campeao-bolao-coroa, .campeao-bolao-anel { animation: none; }
         .campeao-bolao-confete-peca { animation: none; opacity: 0; }
       }
+
+      .banner-retrospecto {
+        display: flex; align-items: center; gap: 10px; width: 100%;
+        margin: 10px 0; padding: 12px 14px; border: 0; cursor: pointer;
+        border-radius: 14px; text-align: left;
+        background: linear-gradient(100deg, #2a1e46, #3a2a63);
+        color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.25);
+      }
+      .banner-retrospecto-emoji { font-size: 22px; }
+      .banner-retrospecto-txt { font-weight: 700; flex: 1; }
+      .banner-retrospecto-cta { opacity: .85; font-size: 14px; white-space: nowrap; }
+
+      .retro-overlay {
+        position: fixed; inset: 0; z-index: 60; display: flex;
+        flex-direction: column; align-items: center; justify-content: center;
+        background: radial-gradient(120% 90% at 50% 0%, #3a2a63 0%, #16121f 70%);
+        padding: 16px;
+      }
+      .retro-progresso {
+        position: absolute; top: 10px; left: 12px; right: 12px;
+        display: flex; gap: 4px;
+      }
+      .retro-progresso-seg {
+        flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.22);
+      }
+      .retro-progresso-seg.on { background: var(--ambar, #ffc53d); }
+      .retro-fechar {
+        position: absolute; top: 16px; right: 14px; z-index: 2;
+        background: transparent; border: 0; color: #fff; font-size: 20px;
+        cursor: pointer; opacity: .8;
+      }
+      .retro-palco {
+        width: 100%; max-width: 380px; min-height: 60vh;
+        display: flex; align-items: center; justify-content: center;
+        user-select: none;
+      }
+      .retro-anima { animation: retroEntra .45s ease both; }
+      @keyframes retroEntra {
+        from { opacity: 0; transform: translateY(14px) scale(.98); }
+        to { opacity: 1; transform: none; }
+      }
+      .retro-card {
+        width: 100%; text-align: center; color: #fff;
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
+        position: relative;
+      }
+      .retro-eyebrow {
+        font-size: 13px; letter-spacing: .12em; opacity: .8; font-weight: 700;
+      }
+      .retro-emoji { font-size: 56px; }
+      .retro-numerao {
+        font-size: 88px; font-weight: 800; line-height: 1;
+        color: var(--ambar, #ffc53d);
+      }
+      .retro-posicao {
+        font-size: 72px; font-weight: 800; line-height: 1;
+        color: var(--ambar, #ffc53d);
+      }
+      .retro-frase { font-size: 20px; font-weight: 700; }
+      .retro-sub { font-size: 15px; opacity: .82; max-width: 300px; }
+      .retro-nome { font-size: 26px; font-weight: 800; }
+      .retro-selo {
+        font-size: 14px; font-weight: 700; padding: 4px 12px; border-radius: 999px;
+        background: rgba(255,197,61,.16); color: var(--ambar, #ffc53d);
+      }
+      .retro-anel {
+        display: inline-flex; padding: 4px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--ambar, #ffc53d), #fff3cf);
+      }
+      .retro-melhorpior { gap: 14px; }
+      .retro-mp-linha {
+        display: flex; align-items: center; gap: 10px; width: 100%;
+        padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.06);
+      }
+      .retro-mp-linha.bom { box-shadow: inset 0 0 0 1px rgba(74,222,128,.4); }
+      .retro-mp-linha.ruim { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); opacity: .85; }
+      .retro-mp-ico { font-size: 22px; }
+      .retro-mp-jogo { flex: 1; text-align: left; font-weight: 600; }
+      .retro-mp-pts { font-weight: 800; color: var(--ambar, #ffc53d); }
+      .retro-bonus { font-size: 15px; font-weight: 700; }
+      .retro-dica { position: absolute; bottom: 22px; font-size: 13px; opacity: .6; color: #fff; }
+      .retro-final-btn {
+        position: absolute; bottom: 20px; padding: 10px 22px; border: 0;
+        border-radius: 999px; cursor: pointer; font-weight: 700;
+        background: var(--ambar, #ffc53d); color: #16121f;
+      }
+      @media (prefers-reduced-motion: reduce) { .retro-anima { animation: none; } }
 
       /* painel "sua posição" — placar do próprio usuário */
       .meu-status {
